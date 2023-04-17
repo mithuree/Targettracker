@@ -1,0 +1,462 @@
+function varargout = targetlocator(varargin)
+% TARGETLOCATOR MATLAB code for targetlocator.fig
+%      TARGETLOCATOR, by itself, creates a new TARGETLOCATOR or raises the existing
+%      singleton*.
+%
+%      H = TARGETLOCATOR returns the handle to a new TARGETLOCATOR or the handle to
+%      the existing singleton*.
+%
+%      TARGETLOCATOR('CALLBACK',hObject,eventData,handles,...) calls the local
+%      function named CALLBACK in TARGETLOCATOR.M with the given input arguments.
+%
+%      TARGETLOCATOR('Property','Value',...) creates a new TARGETLOCATOR or raises the
+%      existing singleton*.  Starting from the left, property value pairs are
+%      applied to the GUI before targetlocator_OpeningFcn gets called.  An
+%      unrecognized property name or invalid value makes property application
+%      stop.  All inputs are passed to targetlocator_OpeningFcn via varargin.
+%
+%      *See GUI Options on GUIDE's Tools menu.  Choose "GUI allows only one
+%      instance to run (singleton)".
+%
+% See also: GUIDE, GUIDATA, GUIHANDLES
+
+% Edit the above text to modify the response to help targetlocator
+
+% Last Modified by GUIDE v2.5 26-Jan-2015 10:32:16
+
+% Begin initialization code - DO NOT EDIT
+gui_Singleton = 1;
+gui_State = struct('gui_Name',       mfilename, ...
+                   'gui_Singleton',  gui_Singleton, ...
+                   'gui_OpeningFcn', @targetlocator_OpeningFcn, ...
+                   'gui_OutputFcn',  @targetlocator_OutputFcn, ...
+                   'gui_LayoutFcn',  [] , ...
+                   'gui_Callback',   []);
+if nargin && ischar(varargin{1})
+    gui_State.gui_Callback = str2func(varargin{1});
+end
+
+if nargout
+    [varargout{1:nargout}] = gui_mainfcn(gui_State, varargin{:});
+else
+    gui_mainfcn(gui_State, varargin{:});
+end
+% End initialization code - DO NOT EDIT
+
+
+% --- Executes just before targetlocator is made visible.
+function targetlocator_OpeningFcn(hObject, eventdata, handles, varargin)
+% This function has no output args, see OutputFcn.
+% hObject    handle to figure
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+% varargin   command line arguments to targetlocator (see VARARGIN)
+
+% Choose default command line output for targetlocator
+clc;% CLERA COMMAND WINDOW
+imaqreset;%RESET VIDEO ADAPTORS 
+handles.video = videoinput('winvideo',1,'YUY2_640x480');% CREATE VIDEO CAPTURE VARIABLE
+
+guidata(gcf, handles);% STORE THE DATA
+set(handles.video,'ReturnedColorSpace','rgb');% set video as color image
+set(handles.video,'TimerPeriod',1,'TimerFcn',@vidfunc);%set timer period to capture new frame after each 0.9 seconds
+set(handles.camera_axes,'ytick',[],'xtick',[]);%remove tick marks from axis display
+triggerconfig(handles.video,'manual');%set video capturing mode as, manual
+
+handles.Height=480;%set height of the image
+handles.Width=640;%set width of the image
+handles.PrevImage=[];%zeros(handles.Height,handles.Width);%create blank image variable to store previous image
+handles.PresImage=[];%zeros(handles.Height,handles.Width);%create blank image variable to store present image
+handles.StartCapture=0;%create variable to start and stop capturing event
+handles.Ne=0;%create variable to store number of regions detected
+handles.ShowDiff=0;%create variable to store the difference image
+handles.Break=0;%create variable to stop at break event
+% Update handles structure
+guidata(hObject, handles);% store all the variables
+% UIWAIT makes targetlocator wait for user response (see UIRESUME)
+uiwait(handles.figure1);
+
+
+% --- Outputs from this function are returned to the command line.
+function varargout = targetlocator_OutputFcn(hObject, eventdata, handles) 
+% varargout  cell array for returning output args (see VARARGOUT);
+% hObject    handle to figure
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Get default command line output from handles structure
+close all;
+
+
+
+% --- Executes on button press in Start_Camera_Pushbutton.
+function Start_Camera_Pushbutton_Callback(hObject, eventdata, handles)
+% hObject    handle to Start_Camera_Pushbutton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+if strcmp(get(handles.Start_Camera_Pushbutton,'String'),'Start Camera')
+    % Camera is off.  Change button string and start camera.
+    set(handles.Start_Camera_Pushbutton,'String','Stop Camera');
+    start(handles.video);%%START CAPTURING IMAGES
+else
+    % Camera is on.  Stop camera and change button string.
+    set(handles.Start_Camera_Pushbutton,'String','Start Camera');
+    stop(handles.video);%STOP CAPTURING IMAGES
+end
+
+% --- Executes on button press in Start_Capture_Pushbutton.
+function Start_Capture_Pushbutton_Callback(hObject, eventdata, handles)
+% hObject    handle to Start_Capture_Pushbutton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+if(handles.StartCapture==0)
+    handles.StartCapture=1;%start capturing and processiing
+    set(handles.Start_Capture_Pushbutton,'String','Stop Capture');%display message
+    set(handles.Status_Text,'String','Capture ON');%dip
+else
+    handles.StartCapture=0;
+    set(handles.Start_Capture_Pushbutton,'String','Start Capture');
+    set(handles.Status_Text,'String','Capture OFF');
+end
+guidata(hObject, handles);%save the gui data on handles
+guidata(gcf, handles);%save changes on graphics figure
+
+
+% --- Executes on button press in Exit_Pushbutton.
+function Exit_Pushbutton_Callback(hObject, eventdata, handles)
+% hObject    handle to Exit_Pushbutton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+stringt=get(handles.Start_Camera_Pushbutton,'String');
+cmp=strcmp(stringt,'Stop Camera');%check if video capturing is running
+if  cmp==1 %if video capturing is on
+    stop(handles.video);% stop the video capturing
+end
+pause(1)
+delete(handles.video);% delete the video capturing variable
+uiresume;%resume to close the window
+
+
+% --- Executes on button press in Show_Diff_Pushbutton.
+function Show_Diff_Pushbutton_Callback(hObject, eventdata, handles)
+% hObject    handle to Show_Diff_Pushbutton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+if(handles.ShowDiff==0)
+    handles.ShowDiff=1;%set variable to show difference variable
+    set(handles.Status_Text,'String','Diff ON');% display message
+else
+    handles.ShowDiff=0;
+    set(handles.Status_Text,'String','Diff OFF');% display message
+end
+guidata(hObject, handles);%save the gui data on handles
+guidata(gcf, handles);%save changes on graphics figure
+
+
+% --- Executes on button press in Break_Pushbutton.
+function Break_Pushbutton_Callback(hObject, eventdata, handles)
+% hObject    handle to Break_Pushbutton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+handles.Break=1;%set variable high to stop the process
+disp('Break Activated');
+guidata(hObject, handles);%save the gui data on handles
+guidata(gcf, handles);%save changes on graphics figure
+
+
+
+function Measure_EditText_Callback(hObject, eventdata, handles)
+% hObject    handle to Measure_EditText (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of Measure_EditText as text
+%        str2double(get(hObject,'String')) returns contents of Measure_EditText as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function Measure_EditText_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to Measure_EditText (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function Target_Radius_EditText_Callback(hObject, eventdata, handles)
+% hObject    handle to Target_Radius_EditText (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of Target_Radius_EditText as text
+%        str2double(get(hObject,'String')) returns contents of Target_Radius_EditText as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function Target_Radius_EditText_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to Target_Radius_EditText (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function Ymin_EditText_Callback(hObject, eventdata, handles)
+% hObject    handle to Ymin_EditText (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of Ymin_EditText as text
+%        str2double(get(hObject,'String')) returns contents of Ymin_EditText as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function Ymin_EditText_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to Ymin_EditText (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+function Wdt_EditText_Callback(hObject, eventdata, handles)
+% hObject    handle to Wdt_EditText (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of Wdt_EditText as text
+%        str2double(get(hObject,'String')) returns contents of Wdt_EditText as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function Wdt_EditText_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to Wdt_EditText (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+
+
+function Hgt_EditText_Callback(hObject, eventdata, handles)
+% hObject    handle to Hgt_EditText (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of Hgt_EditText as text
+%        str2double(get(hObject,'String')) returns contents of Hgt_EditText as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function Hgt_EditText_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to Hgt_EditText (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+videofunc
+function vidfunc(hObject, event, handles)
+if(~isempty(gco))%if graphical objects are present
+    %%  CAPTURE IMAGE
+
+	handles=guidata(gcf);% Store the all graphics variable data in handles
+    Iorg=getsnapshot(handles.video);%% get snapshot as image
+    imshow(Iorg);hold on;%display captured image
+	hold on;
+%%  READ THE DIMENSION OF TARGET BOARD
+    handles.Cx=handles.Width/2;% set x middle point of screen
+    handles.Cy=handles.Height/2;%set y middle point of screen
+%%      DRAW SCALE RED RECTANGLE OF 100 PIXEL WIDE        
+	Delta=50;%set delta difference for pixel scalling
+	Mxmin=handles.Cx-Delta;% find minimum x dimension
+	Mxmax=handles.Cx+Delta;% find maximum x dimension
+	MWidth=Mxmax-Mxmin;%    find width of the scale bar
+		
+	Mymin=handles.Cx-2;%    find the minimum y dimension
+	rectangle('position',[Mxmin Mymin MWidth 4],'EdgeColor','r','LineWidth',1);%display the rectangle
+ 
+%%  FIND THE SCALE        	
+	ActualMeasure=str2double(get(handles.Measure_EditText,'String'));%read the EditText value 
+	%handles.Scale=ActualMeasure/MWidth;% find the ratio of actual Measure to Screen Pixel ratio
+	handles.Scale=MWidth /ActualMeasure;
+    set(handles.Scale_Text,'String',num2str(handles.Scale));% display the ratio on Scale_Text    
+    %handles.TBradius= str2double(get(handles.Target_Radius_EditText,'String'));% read the radius of target board
+%%  plot circles and board   
+    theta=linspace(0,2*pi,360);RadScal=25;
+    % 10 point circle, 25 mm radius
+    r=1*RadScal*handles.Scale;plot(handles.Cx+r.*sin(theta),handles.Cy+r.*cos(theta),'color','r');
+    % 9 point circle, 50 mm radius
+    r=2*RadScal*handles.Scale;plot(handles.Cx+r.*sin(theta),handles.Cy+r.*cos(theta),'color','m');
+    % 8 point circle, 50 mm radius
+    r=3*RadScal*handles.Scale;plot(handles.Cx+r.*sin(theta),handles.Cy+r.*cos(theta),'color','m');
+    % 7 point circle, 50 mm radius
+    r=4*RadScal*handles.Scale;plot(handles.Cx+r.*sin(theta),handles.Cy+r.*cos(theta),'color','b');
+    % 6 point circle, 50 mm radius
+    r=5*RadScal*handles.Scale;plot(handles.Cx+r.*sin(theta),handles.Cy+r.*cos(theta),'color','c');
+    % 5 point circle, 50 mm radius
+    r=6*RadScal*handles.Scale;plot(handles.Cx+r.*sin(theta),handles.Cy+r.*cos(theta),'color','g');
+    % 4 point circle, 50 mm radius
+    r=7*RadScal*handles.Scale;plot(handles.Cx+r.*sin(theta),handles.Cy+r.*cos(theta),'color','y');
+    % 3 point circle, 50 mm radius
+    r=8*RadScal*handles.Scale;plot(handles.Cx+r.*sin(theta),handles.Cy+r.*cos(theta),'color','y');
+    % 2 point circle, 50 mm radius
+    r=9*RadScal*handles.Scale;plot(handles.Cx+r.*sin(theta),handles.Cy+r.*cos(theta),'color','k');
+    % 1 point circle, 50 mm radius
+    r=10*RadScal*handles.Scale;plot(handles.Cx+r.*sin(theta),handles.Cy+r.*cos(theta),'color','k');
+	handles.TBradius=11*RadScal*handles.Scale;
+    
+%  DRAW TARGET BOARD SQUARE   
+    handles.Xmin=handles.Cx-handles.TBradius;%set minimum x dimension of square around target board
+    handles.Xmax=handles.Cx+handles.TBradius;%set maximum x dimension of square around target board
+    handles.Ymin=handles.Cy-handles.TBradius;%set minimum y dimension of square around target board
+    handles.Ymax=handles.Cy+handles.TBradius;%set maximum y dimension of square around target board
+    handles.Wdt =handles.Xmax-handles.Xmin; % set width of the dquare 
+    handles.Hgt =handles.Ymax-handles.Ymin; %set height of the sequare
+
+
+%%  CUT THE TARGET BOARD IMAGE AREA    
+    I=Iorg(handles.Ymin:handles.Ymax, handles.Xmin:handles.Xmax,:);% cut the target board region are
+%%  START PROCESSING ON TARGET BOARD IMAGE ARE
+    t1=tic;%START TIMER TO MEASURE PROCESSING TIME
+    if(handles.ShowDiff==0)%if diff variable is not set, display normal image
+        plot(handles.Cx,handles.Cy,'r+','MarkerSize',20);% display marker on centre pixel with red+        
+        %  DISPLAY RECTAGLE ON TARGET BOARD
+        rectangle('position',[handles.Xmin handles.Ymin handles.Wdt handles.Hgt],'EdgeColor','b','LineWidth',2);%display the rectangle
+        hold off;
+    end
+
+    if(handles.StartCapture==0)% if capture variable is not set process below
+%%  IN NORMAL SITUATION JUST DISPLAY THE IMAGE
+        handles.PrevImage=rgb2gray(I);% convert captured image into grayscale and store it as previous image
+        set(handles.Status_Text,'String','Capture OFF');%
+        guidata(gcf, handles);%save changes on graphics figure
+    else
+%%  START CAPTURE
+        GrayThreshold=0.7;
+        IBprev=im2bw(handles.PrevImage,GrayThreshold);% generate black and white image of previous image
+
+        PresImage=rgb2gray(I);% convert the captured image into grayscale and store as PresentImage
+        IBpres=im2bw(PresImage,GrayThreshold);% generate black and white image of present image
+        %keyboard
+        if(handles.Break==1)%if break is activated stop here
+            handles.Break=0;
+            keyboard;
+        end
+        Gdiff=abs((IBprev)-(IBpres));% find the difference between present and previous image
+        
+        Ibg=im2bw(Gdiff,0.3);%  convert the difference image Gdiff into black and white image
+        Ibg=bwareaopen(Ibg,50);% remove unwanted regions
+        Ibg=~bwareaopen(~Ibg,50);% remove unwanted regions
+        Ibgf = imfill(Ibg,'holes');%close the inner holes
+        
+        if(handles.ShowDiff==1)%if show diff variable is set
+            imshow(Ibgf);%display the difference motion image
+            set(handles.Status_Text,'String','Diff Image');% 
+        end
+		hold on;
+        [handles.L,handles.Ne]=bwlabel(Ibgf);% lable white regions of difference image
+        propied=regionprops(handles.L,'BoundingBox');%generate property of difference image
+        if(handles.Ne>0)%if white regions (motion) is detected process below region
+            for i=1:handles.Ne%display green box on all regions
+                Rdim=propied(i).BoundingBox;
+                Rdim(1)=Rdim(1)+handles.Xmin;Rdim(2)=Rdim(2)+handles.Ymin;
+                %Rdim(3)=handles.Wdt;Rdim(4)=handles.Hgt;
+                rectangle('position',Rdim,'EdgeColor','g','LineWidth',2);
+            end
+            s  = regionprops(Ibgf, 'centroid');%find the centroid of all white regions
+            centroids = cat(1, s.Centroid);%extract centroid dimensions
+            hs=centroids;
+            N=size(hs,1);
+            for j=1:N
+                Centx=round(hs(j,1)+handles.Xmin);% update centroids points location
+                Centy=round(hs(j,2)+handles.Ymin);% update centroids points location
+				Xd=Centx-handles.Cx;Yd=Centy-handles.Cy;
+                Xdiff=round((Xd)/handles.Scale);
+                Ydiff=round((Yd)/handles.Scale);
+				RadObj=sqrt(Xdiff^2+Ydiff^2);
+                plot(Centx, Centy,'g+','MarkerSize',20);%plot all centroid pixels on image
+                %text(Centx,Centy-5,['[' num2str(Xdiff) ',' num2str(Ydiff) ']'],'BackgroundColor','w');
+				
+				if(RadObj<=1*RadScal)
+					text(Centx,Centy-5,['Point=' num2str(10)],'BackgroundColor','g');
+				else
+					if(RadObj<=2*RadScal)
+						text(Centx,Centy-5,['Point=' num2str(9)],'BackgroundColor','g');
+					else
+						if(RadObj<=3*RadScal)
+							text(Centx,Centy-5,['Point=' num2str(8)],'BackgroundColor','g');
+						else
+							if(RadObj<=4*RadScal)
+								text(Centx,Centy-5,['Point=' num2str(7)],'BackgroundColor','c');
+							else
+								if(RadObj<=5*RadScal)
+									text(Centx,Centy-5,['Point=' num2str(6)],'BackgroundColor','c');
+								else
+									if(RadObj<=6*RadScal)
+										text(Centx,Centy-5,['Point=' num2str(5)],'BackgroundColor','c');
+									else
+										if(RadObj<=7*RadScal)
+											text(Centx,Centy-5,['Point=' num2str(4)],'BackgroundColor','y');
+										else
+											if(RadObj<=8*RadScal)
+												text(Centx,Centy-5,['Point=' num2str(3)],'BackgroundColor','y');
+											else
+												if(RadObj<=9*RadScal)
+													text(Centx,Centy-5,['Point=' num2str(2)],'BackgroundColor','y');
+												else
+													if(RadObj<=10*RadScal)
+														text(Centx,Centy-5,['Point=' num2str(1)],'BackgroundColor','r');
+													else
+														text(Centx,Centy-5,['Point=' num2str(1)],'BackgroundColor','r');
+													end													
+												end												
+											end											
+										end										
+									end									
+								end								
+							end							
+						end						
+					end
+				end%%25
+            end  
+            set(handles.Status_Text,'String','Diff Detected');% 
+        else%if no regions detected process below
+            guidata(gcf, handles);%save changes on graphics figure
+            set(handles.Status_Text,'String','No Diff');% 
+        end
+        %handles.PrevImage=handles.PresImage;%after completion of all process, set present image as previous for next frame
+    end
+    ProcessingTime=toc(t1);%STOP TIMER TO MEASURE PROCESSING TIME
+    set(handles.video,'TimerPeriod',ceil(ProcessingTime));% reset the timer period of webcam capturing
+    guidata(gcf, handles);%save changes on graphics figure
+else
+    disp('Image device deleted');
+    delete(imaqfind)%delete the device
+    guidata(gcf, handles);
+end
